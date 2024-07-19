@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -126,17 +127,38 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	go client.writePump()
 	go client.readPump()
 }
+    
+func getLocalIP() (string, error) {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String(), nil
+}
 
 func main() {
 	hub := newHub()
 	go hub.run()
 
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "client.html")
+	})
+
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, w, r)
 	})
 
-	log.Println("HTTP server started on :8080")
-	err := http.ListenAndServe(":8080", nil)
+	localIP, err := getLocalIP()
+	if err != nil {
+		log.Fatalf("Failed to get local IP address: %v", err)
+	}
+	addr := localIP + ":8080"
+
+	log.Printf("HTTP server started on %s", addr)
+	err = http.ListenAndServe(addr, nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
